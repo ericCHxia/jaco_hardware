@@ -46,7 +46,7 @@ include_directories(
 # )
 
 ## Declare a cpp executable
-add_executable(jaco_hardware src/main.cpp src/JacoRobot.cpp)
+add_executable(jaco_hardware src/main.cpp src/JacoRobot.cpp src/kinova_api.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -54,8 +54,7 @@ add_executable(jaco_hardware src/main.cpp src/JacoRobot.cpp)
 set(KINOVA_ARM_LIBS ${catkin_LIBRARIES})
 set(KINOVA_ARM_LIBS
     ${KINOVA_ARM_LIBS}
-    -l:USBCommLayerUbuntu.so
-    -l:USBCommandLayerUbuntu.so)
+    )
 
 
 #==============================================================================

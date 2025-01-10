@@ -3,7 +3,8 @@
 
 using namespace std;
 
-JacoRobot::JacoRobot(ros::NodeHandle nh) {
+JacoRobot::JacoRobot(ros::NodeHandle nh)
+{
   ROS_INFO("Starting to initialize jaco_hardware");
   int i;
   cmd_pos.resize(num_full_dof);
@@ -157,39 +158,60 @@ JacoRobot::JacoRobot(ros::NodeHandle nh) {
   int r = NO_ERROR_KINOVA;
 
   ROS_INFO("Attempting to inialize API...");
-  r = InitAPI();
-  if (r != NO_ERROR_KINOVA) {
+  kinova_api_.initializeKinovaAPIFunctions(kinova::USB);
+  int api_version[API_VERSION_COUNT];
+  r = kinova_api_.getAPIVersion(api_version);
+  if (r != NO_ERROR_KINOVA)
+  {
+    ROS_ERROR("Could not get the Kinova API version %d", r);
+  }
+
+  ROS_INFO_STREAM("Initializing Kinova "
+                  << " API (header version: " << COMMAND_LAYER_VERSION
+                  << ", library version: " << api_version[0] << "."
+                  << api_version[1] << "." << api_version[2] << ")");
+
+  r = kinova_api_.initAPI();
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not initialize API: Error code %d", r);
   }
 
   ROS_INFO("Attempting to initialize fingers...");
-  r = InitFingers();
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.initFingers();
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not initialize fingers: Error code %d", r);
   }
 
   ROS_INFO("Attempting to start API control of the robot...");
-  r = StartControlAPI();
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.startControlAPI();
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not start API Control: Error code %d", r);
   }
 
   ROS_INFO("Attempting to set angular control...");
-  r = SetAngularControl();
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.setAngularControl();
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not set angular control: Error code %d", r);
   }
 
   ROS_INFO("Attempting to set torque safety factor...");
-  r = SetTorqueSafetyFactor(1.0f);
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.setTorqueSafetyFactor(1.0f);
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not send : Error code %d", r);
   }
 
   // get soft limits from rosparams
-  if (nh.hasParam("soft_limits/eff")) {
+  if (nh.hasParam("soft_limits/eff"))
+  {
     nh.getParam("soft_limits/eff", soft_limits);
-  } else {
+  }
+  else
+  {
     ROS_WARN("No JACO soft limits in param server! Using defaults.");
     const double defaults[] = {16, 16, 16, 10, 10, 10, 1.3, 1.3};
     soft_limits.assign(defaults, defaults + num_full_dof);
@@ -211,38 +233,46 @@ JacoRobot::JacoRobot(ros::NodeHandle nh) {
   mInTorqueMode = false;
 }
 
-JacoRobot::~JacoRobot() {
+JacoRobot::~JacoRobot()
+{
   int r = NO_ERROR_KINOVA;
 
   ROS_INFO("Erase all trajectories");
-  r = EraseAllTrajectories();
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.eraseAllTrajectories();
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not erase trajectories: Error code %d", r);
   }
 
-  r = StopControlAPI();
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.stopControlAPI();
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not stop API Control: Error code %d", r);
   }
-  r = CloseAPI();
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.closeAPI();
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not close API Control: Error code %d", r);
   }
 
   ros::Duration(0.10).sleep();
 }
 
-void JacoRobot::initializeOffsets() {
+void JacoRobot::initializeOffsets()
+{
   this->read();
 
   // Next, we wrap the positions so they are within -pi to pi of
   // the hardcoded midpoints, and add that to the offset.
-  for (int i = 0; i < num_arm_dof; i++) {
-    while (this->pos[i] < hardcoded_pos_midpoints[i] - M_PI) {
+  for (int i = 0; i < num_arm_dof; i++)
+  {
+    while (this->pos[i] < hardcoded_pos_midpoints[i] - M_PI)
+    {
       this->pos[i] += 2.0 * M_PI;
       this->pos_offsets[i] += 2.0 * M_PI;
     }
-    while (this->pos[i] > hardcoded_pos_midpoints[i] + M_PI) {
+    while (this->pos[i] > hardcoded_pos_midpoints[i] + M_PI)
+    {
       this->pos[i] -= 2.0 * M_PI;
       this->pos_offsets[i] -= 2.0 * M_PI;
     }
@@ -253,38 +283,45 @@ void JacoRobot::initializeOffsets() {
 
 ros::Time JacoRobot::get_time(void) { return ros::Time::now(); }
 
-ros::Duration JacoRobot::get_period(void) {
+ros::Duration JacoRobot::get_period(void)
+{
   // TODO(benwr): What is a reasonable period?
   // Here I've assumed  10ms
   return ros::Duration(0.01);
 }
 
-inline double JacoRobot::degreesToRadians(double degrees) {
+inline double JacoRobot::degreesToRadians(double degrees)
+{
   return (M_PI / 180.0) * degrees;
 }
 
-inline double JacoRobot::radiansToDegrees(double radians) {
+inline double JacoRobot::radiansToDegrees(double radians)
+{
   return (180.0 / M_PI) * radians;
 }
 
-inline double JacoRobot::radiansToFingerTicks(double radians) {
+inline double JacoRobot::radiansToFingerTicks(double radians)
+{
   return (6800.0 / 80) * radians * 180.0 /
          M_PI; // this magic number was found in the kinova-ros code,
                // kinova_driver/src/kinova_arm.cpp
 }
 
-inline double JacoRobot::fingerTicksToRadians(double ticks) {
+inline double JacoRobot::fingerTicksToRadians(double ticks)
+{
   return ticks * (80 / 6800.0) * M_PI /
          180.0; // this magic number was found in the kinova-ros code,
                 // kinova_driver/src/kinova_arm.cpp
 }
 
-bool JacoRobot::setTorqueMode(bool torqueMode) {
+bool JacoRobot::setTorqueMode(bool torqueMode)
+{
 
   int r = NO_ERROR_KINOVA;
 
-  r = SwitchTrajectoryTorque(torqueMode ? TORQUE : POSITION);
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.switchTrajectoryTorque(torqueMode ? TORQUE : POSITION);
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not send : Error code %d", r);
     return false;
   }
@@ -293,8 +330,10 @@ bool JacoRobot::setTorqueMode(bool torqueMode) {
   return true;
 }
 
-bool JacoRobot::useGravcompForEStop(bool use, std::string fileName) {
-  if (fileName.empty()) {
+bool JacoRobot::useGravcompForEStop(bool use, std::string fileName)
+{
+  if (fileName.empty())
+  {
     return false;
   }
 
@@ -302,11 +341,13 @@ bool JacoRobot::useGravcompForEStop(bool use, std::string fileName) {
   std::vector<float> params;
 
   std::ifstream file(path);
-  if (!file.is_open()) {
+  if (!file.is_open())
+  {
     ROS_ERROR("Could not open file: %s", path.c_str());
     return false;
   }
-  while (!file.eof()) {
+  while (!file.eof())
+  {
     float param;
     file >> param;
     params.push_back(param);
@@ -322,8 +363,10 @@ bool JacoRobot::useGravcompForEStop(bool use, std::string fileName) {
   return useGravcompForEStop(use, params);
 }
 
-bool JacoRobot::useGravcompForEStop(bool use, std::vector<float> params) {
-  if (!use || params.size() == 0) {
+bool JacoRobot::useGravcompForEStop(bool use, std::vector<float> params)
+{
+  if (!use || params.size() == 0)
+  {
     mUseGravComp = false;
     return false || !use;
   }
@@ -332,15 +375,17 @@ bool JacoRobot::useGravcompForEStop(bool use, std::vector<float> params) {
   std::copy(params.begin(), params.end(), arr);
 
   int r = NO_ERROR_KINOVA;
-  r = SetGravityOptimalZParam(arr);
+  r = kinova_api_.setGravityOptimalZParam(arr);
   // Known error, see https://github.com/Kinovarobotics/kinova-ros/issues/114
-  if (r != NO_ERROR_KINOVA && r != 2005) {
+  if (r != NO_ERROR_KINOVA && r != 2005)
+  {
     ROS_ERROR("Could not send Z Params : Error code %d", r);
     mUseGravComp = false;
     return false;
   }
-  r = SetGravityType(OPTIMAL);
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.setGravityType(OPTIMAL);
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not send Gravity Type : Error code %d", r);
     mUseGravComp = false;
     return false;
@@ -350,26 +395,32 @@ bool JacoRobot::useGravcompForEStop(bool use, std::vector<float> params) {
   return true;
 }
 
-std::vector<float> JacoRobot::calcGravcompParams() {
+std::vector<float> JacoRobot::calcGravcompParams()
+{
   double arr[OPTIMAL_Z_PARAM_SIZE] = {0};
 
   int r = NO_ERROR_KINOVA;
-  r = RunGravityZEstimationSequence(our_robot_type, arr);
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.runGravityZEstimationSequence(our_robot_type, arr);
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not run sequence : Error code %d", r);
     return std::vector<float>();
   }
 
   std::vector<float> ret(OPTIMAL_Z_PARAM_SIZE);
-  for (int i = 0; i < OPTIMAL_Z_PARAM_SIZE; i++) {
+  for (int i = 0; i < OPTIMAL_Z_PARAM_SIZE; i++)
+  {
     ret[i] = (float)arr[i];
   }
   return ret;
 }
 
-void JacoRobot::sendPositionCommand(const std::vector<double> &command) {
-  if (mInTorqueMode) {
-    if (!setTorqueMode(false)) {
+void JacoRobot::sendPositionCommand(const std::vector<double> &command)
+{
+  if (mInTorqueMode)
+  {
+    if (!setTorqueMode(false))
+    {
       ROS_WARN("Could not exit torque mode.");
       return;
     }
@@ -379,7 +430,6 @@ void JacoRobot::sendPositionCommand(const std::vector<double> &command) {
   // settings Angular position
   AngularInfo joint_pos;
   joint_pos.InitStruct();
-  
 
   joint_pos.Actuator1 = float(radiansToDegrees(command.at(0) - pos_offsets[0]));
   joint_pos.Actuator2 = float(radiansToDegrees(command.at(1) - pos_offsets[1]));
@@ -403,23 +453,27 @@ void JacoRobot::sendPositionCommand(const std::vector<double> &command) {
       float(radiansToFingerTicks(command.at(7)));
 
   // Clear FIFO if new command
-  if(command != prev_cmd_pos) {
-    EraseAllTrajectories();
+  if (command != prev_cmd_pos)
+  {
+    kinova_api_.eraseAllTrajectories();
     prev_cmd_pos = command;
   }
 
   int r = NO_ERROR_KINOVA;
-  r = SendAdvanceTrajectory(trajectory);
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.sendAdvanceTrajectory(trajectory);
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not send : Error code %d", r);
   }
 }
 
-bool JacoRobot::zeroTorqueSensors() {
+bool JacoRobot::zeroTorqueSensors()
+{
   // Move to candlestick
   const double PI = 3.1415926535897932384626;
   std::vector<double> command(num_full_dof);
-  for (int i = 0; i < num_arm_dof; i++) {
+  for (int i = 0; i < num_arm_dof; i++)
+  {
     command[i] = PI;
   }
   command[4] = 0.0;
@@ -435,10 +489,12 @@ bool JacoRobot::zeroTorqueSensors() {
   // Zero all actuators
   // Actuator addresses are 16-21
   ROS_INFO("Executing torque zero...");
-  for (int i = 16; i < 22; i++) {
+  for (int i = 16; i < 22; i++)
+  {
     int r = NO_ERROR_KINOVA;
-    r = SetTorqueZero(i);
-    if (r != NO_ERROR_KINOVA) {
+    r = kinova_api_.setTorqueZero(i);
+    if (r != NO_ERROR_KINOVA)
+    {
       ROS_ERROR("Could not set torque zero : Error code %d", r);
       return false;
     }
@@ -447,9 +503,12 @@ bool JacoRobot::zeroTorqueSensors() {
   return true;
 }
 
-void JacoRobot::sendVelocityCommand(const std::vector<double> &command) {
-  if (mInTorqueMode) {
-    if (!setTorqueMode(false)) {
+void JacoRobot::sendVelocityCommand(const std::vector<double> &command)
+{
+  if (mInTorqueMode)
+  {
+    if (!setTorqueMode(false))
+    {
       ROS_WARN("Could not exit torque mode.");
       return;
     }
@@ -482,23 +541,28 @@ void JacoRobot::sendVelocityCommand(const std::vector<double> &command) {
       float(radiansToFingerTicks(command.at(7)));
 
   int r = NO_ERROR_KINOVA;
-  r = SendAdvanceTrajectory(trajectory);
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.sendAdvanceTrajectory(trajectory);
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not send : Error code %d", r);
   }
 }
 
-void JacoRobot::sendTorqueCommand(const std::vector<double> &command) {
+void JacoRobot::sendTorqueCommand(const std::vector<double> &command)
+{
   // Check if in torque mode
   int mode = 0;
-  GetTrajectoryTorqueMode(mode);
-  if (!mode) {
+  kinova_api_.getTrajectoryTorqueMode(mode);
+  if (!mode)
+  {
     ROS_WARN("Dropped out of torque mode. Retrying...");
     mInTorqueMode = false;
   }
 
-  if (!mInTorqueMode) {
-    if (!setTorqueMode(true)) {
+  if (!mInTorqueMode)
+  {
+    if (!setTorqueMode(true))
+    {
       ROS_WARN("Could not enter torque mode.");
       return;
     }
@@ -509,27 +573,32 @@ void JacoRobot::sendTorqueCommand(const std::vector<double> &command) {
   std::copy(command.begin(), command.end(), joint_eff);
 
   int r = NO_ERROR_KINOVA;
-  r = SendAngularTorqueCommand(joint_eff);
-  if (r != NO_ERROR_KINOVA) {
+  r = kinova_api_.sendAngularTorqueCommand(joint_eff);
+  if (r != NO_ERROR_KINOVA)
+  {
     ROS_ERROR("Could not send : Error code %d", r);
   }
 }
 
-void JacoRobot::enterGravComp() {
+void JacoRobot::enterGravComp()
+{
   joint_mode = hardware_interface::JointCommandModes::EMERGENCY_STOP;
 }
 
-void JacoRobot::write(void) {
+void JacoRobot::write(void)
+{
   // Clear all commands when switching modes
-  if (last_mode != joint_mode) {
-    EraseAllTrajectories();
+  if (last_mode != joint_mode)
+  {
+    kinova_api_.eraseAllTrajectories();
     setTorqueMode(false);
     last_mode = joint_mode;
   }
 
   vector<double> zero(num_full_dof, 0.0);
 
-  switch (joint_mode) {
+  switch (joint_mode)
+  {
   case hardware_interface::JointCommandModes::MODE_VELOCITY:
     sendVelocityCommand(cmd_vel);
     break;
@@ -541,7 +610,8 @@ void JacoRobot::write(void) {
     break;
   case hardware_interface::JointCommandModes::EMERGENCY_STOP:
     // Drop to gravity compensation
-    if (mUseGravComp) {
+    if (mUseGravComp)
+    {
       sendTorqueCommand(zero);
       break;
     }
@@ -551,12 +621,15 @@ void JacoRobot::write(void) {
   }
 }
 
-void JacoRobot::checkForStall(void) {
+void JacoRobot::checkForStall(void)
+{
   // check soft limits.
 
   bool all_in_limits = true;
-  for (int i = 0; i < num_full_dof; i++) {
-    if (eff[i] < -soft_limits[i] || eff[i] > soft_limits[i]) {
+  for (int i = 0; i < num_full_dof; i++)
+  {
+    if (eff[i] < -soft_limits[i] || eff[i] > soft_limits[i])
+    {
       all_in_limits = false;
       ROS_WARN("Exceeded soft effort limits on joint %d. Limit=%f, Measured=%f",
                i, soft_limits[i], eff[i]);
@@ -564,7 +637,8 @@ void JacoRobot::checkForStall(void) {
   }
 }
 
-void JacoRobot::read(void) {
+void JacoRobot::read(void)
+{
   // make sure that pos, vel, and eff are up to date.
   // TODO: If there is too much lag between calling read()
   // and getting the actual values back, we'll need to be
@@ -576,9 +650,9 @@ void JacoRobot::read(void) {
   AngularPosition arm_torq;
 
   // Requires 3 seperate calls to the USB
-  GetAngularPosition(arm_pos);
-  GetAngularVelocity(arm_vel);
-  GetAngularForce(arm_torq);
+  kinova_api_.getAngularPosition(arm_pos);
+  kinova_api_.getAngularVelocity(arm_vel);
+  kinova_api_.getAngularForce(arm_torq);
 
   pos[0] =
       degreesToRadians(double(arm_pos.Actuators.Actuator1)) + pos_offsets[0];

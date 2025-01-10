@@ -15,29 +15,31 @@
 #include <ros/ros.h>
 
 // kinova api
-#include <kinova/Kinova.API.USBCommandLayerUbuntu.h>
-#include <kinova/KinovaTypes.h>
+#include "kinova_api.h"
+// #include <kinova/Kinova.API.USBCommandLayerUbuntu.h>
+// #include <kinova/KinovaTypes.h>
 
 // c++
 #include <iostream>
 #include <limits>
 #include <stdexcept>
-
+#define API_VERSION_COUNT 3
 using namespace std;
 
 // This makes the reported joint values to start within urdf limits
 static const double hardcoded_pos_midpoints[6] = {0.0, M_PI, M_PI,
-                                                  0.0, 0.0,  0.0};
+                                                  0.0, 0.0, 0.0};
 static const int num_full_dof = 8;
 static const int num_arm_dof = 6;
 static const int num_finger_dof = 2;
 
 static const ROBOT_TYPE our_robot_type = JACOV2_6DOF_ASSISTIVE;
 
-class JacoRobot : public hardware_interface::RobotHW {
+class JacoRobot : public hardware_interface::RobotHW
+{
 public:
   JacoRobot(ros::NodeHandle nh);
-
+  kinova::KinovaAPI kinova_api_;
   virtual ~JacoRobot();
 
   void initializeOffsets();
