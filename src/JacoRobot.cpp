@@ -426,6 +426,13 @@ void JacoRobot::sendPositionCommand(const std::vector<double> &command)
     }
     ROS_INFO("Exited torque mode.");
   }
+
+  ROS_DEBUG("Sending position command");
+  for (int i = 0; i < 6; i++)
+  {
+    ROS_DEBUG("Joint %d: %f", i, command.at(i));
+  }
+
   // Need to send an "advance trajectory" with a single point and the correct
   // settings Angular position
   AngularInfo joint_pos;
@@ -464,6 +471,8 @@ void JacoRobot::sendPositionCommand(const std::vector<double> &command)
   if (r != NO_ERROR_KINOVA)
   {
     ROS_ERROR("Could not send : Error code %d", r);
+  } else {
+    ROS_DEBUG("Sent position command");
   }
 }
 
@@ -517,6 +526,11 @@ void JacoRobot::sendVelocityCommand(const std::vector<double> &command)
 
   // Need to send an "advance trajectory" with a single point and the correct
   // settings Angular velocity
+  ROS_DEBUG("Sending velocity command");
+  for (int i = 0; i < 6; i++)
+  {
+    ROS_DEBUG("Joint %d: %f", i, command.at(i));
+  }
 
   AngularInfo joint_vel;
   joint_vel.InitStruct();
@@ -545,6 +559,8 @@ void JacoRobot::sendVelocityCommand(const std::vector<double> &command)
   if (r != NO_ERROR_KINOVA)
   {
     ROS_ERROR("Could not send : Error code %d", r);
+  } else {
+    ROS_DEBUG("Sent velocity command");
   }
 }
 
@@ -568,7 +584,11 @@ void JacoRobot::sendTorqueCommand(const std::vector<double> &command)
     }
     ROS_INFO("Entered torque mode.");
   }
-
+  ROS_DEBUG("Sending torque command");
+  for (int i = 0; i < 6; i++)
+  {
+    ROS_DEBUG("Joint %d: %f", i, command.at(i));
+  }
   float joint_eff[COMMAND_SIZE] = {0};
   std::copy(command.begin(), command.end(), joint_eff);
 
@@ -577,6 +597,8 @@ void JacoRobot::sendTorqueCommand(const std::vector<double> &command)
   if (r != NO_ERROR_KINOVA)
   {
     ROS_ERROR("Could not send : Error code %d", r);
+  } else {
+    ROS_DEBUG("Sent torque command");
   }
 }
 
